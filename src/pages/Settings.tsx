@@ -1,30 +1,101 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Save } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/auth/authcontext";
+import { toast } from "@/components/ui/use-toast";
 
 const Settings = () => {
   const navigate = useNavigate();
+  const { currentUser, userData, updateUserProfile, updateUserPassword } = useAuth();
+  
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
-  const handleUpdateProfile = (e: React.FormEvent) => {
+  // Load user data when component mounts
+  useEffect(() => {
+    if (currentUser) {
+      setEmail(currentUser.email || "");
+    }
+    if (userData) {
+      setName(userData.name || "");
+    }
+  }, [currentUser, userData]);
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement profile update logic
-    console.log("Updating profile", { name, email });
+    if (!name.trim()) {
+      toast({
+        title: "Error",
+        description: "Name cannot be empty",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUpdatingProfile(true);
+    try {
+      await updateUserProfile(name);
+      toast({
+        title: "Success",
+        description: "Profile updated successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update profile",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingProfile(false);
+    }
   };
 
-  const handleUpdatePassword = (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement password update logic
-    console.log("Updating password");
+    if (newPassword.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      await updateUserPassword(newPassword);
+      setNewPassword("");
+      setConfirmPassword("");
+      toast({
+        title: "Success",
+        description: "Password updated successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update password",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingPassword(false);
+    }
   };
 
   return (
@@ -52,6 +123,7 @@ const Settings = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Your name"
+                  disabled={isUpdatingProfile}
                 />
               </div>
               <div className="space-y-2">
@@ -60,13 +132,17 @@ const Settings = () => {
                   id="email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  disabled
+                  className="bg-muted"
                   placeholder="Your email"
                 />
+                <p className="text-sm text-muted-foreground">
+                  Email cannot be changed
+                </p>
               </div>
-              <Button type="submit">
+              <Button type="submit" disabled={isUpdatingProfile}>
                 <Save className="mr-2 h-4 w-4" />
-                Update Profile
+                {isUpdatingProfile ? "Updating..." : "Update Profile"}
               </Button>
             </form>
           </CardContent>
@@ -79,16 +155,6 @@ const Settings = () => {
           <CardContent>
             <form onSubmit={handleUpdatePassword} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="currentPassword">Current Password</Label>
-                <Input
-                  id="currentPassword"
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="Enter current password"
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="newPassword">New Password</Label>
                 <Input
                   id="newPassword"
@@ -96,6 +162,7 @@ const Settings = () => {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Enter new password"
+                  disabled={isUpdatingPassword}
                 />
               </div>
               <div className="space-y-2">
@@ -106,11 +173,12 @@ const Settings = () => {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm new password"
+                  disabled={isUpdatingPassword}
                 />
               </div>
-              <Button type="submit">
+              <Button type="submit" disabled={isUpdatingPassword}>
                 <Save className="mr-2 h-4 w-4" />
-                Update Password
+                {isUpdatingPassword ? "Updating..." : "Update Password"}
               </Button>
             </form>
           </CardContent>

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   SidebarProvider,
   Sidebar,
@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/components/ui/use-toast";
+import { useAuth } from "@/auth/authcontext";
 
 const CHECKPOINTS: CheckpointWithValue[] = [
   {
@@ -67,13 +68,22 @@ const CHECKPOINTS: CheckpointWithValue[] = [
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { logout, currentUser, userData } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [messages, setMessages] = useState<Array<{ text: string; sender: "user" | "bot" }>>([
-    { text: "Hello! Upload a PDF and select checkpoints to analyze it.", sender: "bot" },
+    { text: `Welcome ${userData?.name || currentUser?.displayName || ''}! Upload a PDF and select checkpoints to analyze it.`, sender: "bot" },
   ]);
   const [checkpoints, setCheckpoints] = useState<CheckpointWithValue[]>(CHECKPOINTS);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Update welcome message when user data changes
+  useEffect(() => {
+    setMessages([
+      { text: `Welcome ${userData?.name || currentUser?.displayName || ''}! Upload a PDF and select checkpoints to analyze it.`, sender: "bot" },
+    ]);
+  }, [userData, currentUser]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -90,13 +100,28 @@ const Dashboard = () => {
         title: "Success",
         description: "PDF uploaded successfully",
       });
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload PDF",
+        variant: "destructive"
+      });
     }
   };
 
-  const handleLogout = () => {
-    navigate("/login");
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      navigate("/login");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to logout",
+        variant: "destructive"
+      });
+      setIsLoggingOut(false);
+    }
   };
 
   const handleCheckpointToggle = (checkpointId: string) => {
@@ -114,6 +139,11 @@ const Dashboard = () => {
   const handleProcessCheckpoints = async () => {
     const selectedCheckpoints = checkpoints.filter(cp => cp.isSelected);
     if (selectedCheckpoints.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please select at least one checkpoint",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -121,6 +151,11 @@ const Dashboard = () => {
       cp => cp.requiresInput && !cp.value
     );
     if (missingInputs) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required inputs",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -131,8 +166,12 @@ const Dashboard = () => {
         { text: "Processing checkpoints...", sender: "user" },
         { text: response.result, sender: "bot" }
       ]);
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to process checkpoints",
+        variant: "destructive"
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -205,9 +244,10 @@ const Dashboard = () => {
               variant="ghost" 
               className="w-full justify-start text-destructive hover:text-destructive"
               onClick={handleLogout}
+              disabled={isLoggingOut}
             >
               <LogOut className="mr-2" />
-              Logout
+              {isLoggingOut ? "Logging out..." : "Logout"}
             </Button>
           </SidebarFooter>
         </Sidebar>
@@ -265,7 +305,7 @@ const Dashboard = () => {
               disabled={isProcessing || !currentFile}
             >
               <Send className="mr-2 h-4 w-4" />
-              Process Checkpoints
+              {isProcessing ? "Processing..." : "Process Checkpoints"}
             </Button>
           </div>
         </main>
