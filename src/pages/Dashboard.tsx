@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   SidebarProvider,
   Sidebar,
@@ -23,10 +22,13 @@ import {
   Settings,
   Upload,
   Send,
+  LogOut,
 } from "lucide-react";
 import { api, type CheckpointWithValue } from "@/lib/api";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useNavigate } from "react-router-dom";
+import { toast } from "@/components/ui/use-toast";
 
 const CHECKPOINTS: CheckpointWithValue[] = [
   {
@@ -64,11 +66,38 @@ const CHECKPOINTS: CheckpointWithValue[] = [
 ];
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [messages, setMessages] = useState<Array<{ text: string; sender: "user" | "bot" }>>([
     { text: "Hello! Upload a PDF and select checkpoints to analyze it.", sender: "bot" },
   ]);
   const [checkpoints, setCheckpoints] = useState<CheckpointWithValue[]>(CHECKPOINTS);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setCurrentFile(file);
+      const result = await api.uploadPDF(file);
+      setMessages(prev => [...prev, 
+        { text: `Uploaded: ${file.name}`, sender: "user" },
+        { text: "PDF uploaded successfully. You can now select checkpoints to analyze it.", sender: "bot" }
+      ]);
+      toast({
+        title: "Success",
+        description: "PDF uploaded successfully",
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleLogout = () => {
+    navigate("/login");
+  };
 
   const handleCheckpointToggle = (checkpointId: string) => {
     setCheckpoints(checkpoints.map(cp => 
@@ -88,7 +117,6 @@ const Dashboard = () => {
       return;
     }
 
-    // Validate required inputs
     const missingInputs = selectedCheckpoints.some(
       cp => cp.requiresInput && !cp.value
     );
@@ -124,7 +152,17 @@ const Dashboard = () => {
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
-                    <SidebarMenuButton className="w-full">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      accept=".pdf"
+                      className="hidden"
+                    />
+                    <SidebarMenuButton 
+                      className="w-full"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
                       <Upload className="mr-2" />
                       Upload PDF
                     </SidebarMenuButton>
@@ -154,16 +192,27 @@ const Dashboard = () => {
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="border-t p-4">
-            <Button variant="ghost" className="w-full justify-start">
+          <SidebarFooter className="border-t p-4 space-y-2">
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start"
+              onClick={() => navigate("/settings")}
+            >
               <Settings className="mr-2" />
               Settings
+            </Button>
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start text-destructive hover:text-destructive"
+              onClick={handleLogout}
+            >
+              <LogOut className="mr-2" />
+              Logout
             </Button>
           </SidebarFooter>
         </Sidebar>
 
         <main className="flex-1 flex flex-col">
-          {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.map((msg, index) => (
               <div
@@ -183,7 +232,6 @@ const Dashboard = () => {
             ))}
           </div>
 
-          {/* Checkpoints Selection */}
           <div className="border-t p-4">
             <Card className="mb-4">
               <ScrollArea className="h-[200px] p-4">
@@ -214,7 +262,7 @@ const Dashboard = () => {
             <Button 
               onClick={handleProcessCheckpoints} 
               className="w-full"
-              disabled={isProcessing}
+              disabled={isProcessing || !currentFile}
             >
               <Send className="mr-2 h-4 w-4" />
               Process Checkpoints
