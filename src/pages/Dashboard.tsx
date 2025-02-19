@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   MessageSquare,
   File,
@@ -23,20 +24,90 @@ import {
   Upload,
   Send,
 } from "lucide-react";
+import { api, type CheckpointWithValue } from "@/lib/api";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+const CHECKPOINTS: CheckpointWithValue[] = [
+  {
+    id: "summary",
+    label: "Generate Summary",
+    requiresInput: false,
+    isSelected: false,
+  },
+  {
+    id: "extract_dates",
+    label: "Extract Important Dates",
+    requiresInput: false,
+    isSelected: false,
+  },
+  {
+    id: "custom_question",
+    label: "Ask Custom Question",
+    requiresInput: true,
+    inputPlaceholder: "Enter your question about the document",
+    isSelected: false,
+  },
+  {
+    id: "extract_entities",
+    label: "Extract Named Entities",
+    requiresInput: false,
+    isSelected: false,
+  },
+  {
+    id: "search",
+    label: "Search for Specific Term",
+    requiresInput: true,
+    inputPlaceholder: "Enter search term",
+    isSelected: false,
+  },
+];
 
 const Dashboard = () => {
-  const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Array<{ text: string; sender: "user" | "bot" }>>([
-    { text: "Hello! Upload a PDF to get started.", sender: "bot" },
+    { text: "Hello! Upload a PDF and select checkpoints to analyze it.", sender: "bot" },
   ]);
+  const [checkpoints, setCheckpoints] = useState<CheckpointWithValue[]>(CHECKPOINTS);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!message.trim()) return;
+  const handleCheckpointToggle = (checkpointId: string) => {
+    setCheckpoints(checkpoints.map(cp => 
+      cp.id === checkpointId ? { ...cp, isSelected: !cp.isSelected } : cp
+    ));
+  };
 
-    setMessages([...messages, { text: message, sender: "user" }]);
-    setMessage("");
-    // TODO: Send message to backend
+  const handleInputChange = (checkpointId: string, value: string) => {
+    setCheckpoints(checkpoints.map(cp => 
+      cp.id === checkpointId ? { ...cp, value } : cp
+    ));
+  };
+
+  const handleProcessCheckpoints = async () => {
+    const selectedCheckpoints = checkpoints.filter(cp => cp.isSelected);
+    if (selectedCheckpoints.length === 0) {
+      return;
+    }
+
+    // Validate required inputs
+    const missingInputs = selectedCheckpoints.some(
+      cp => cp.requiresInput && !cp.value
+    );
+    if (missingInputs) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const response = await api.processCheckpoints(selectedCheckpoints);
+      setMessages(prev => [...prev, 
+        { text: "Processing checkpoints...", sender: "user" },
+        { text: response.result, sender: "bot" }
+      ]);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -112,21 +183,43 @@ const Dashboard = () => {
             ))}
           </div>
 
-          {/* Message Input */}
-          <form
-            onSubmit={handleSendMessage}
-            className="border-t p-4 flex gap-2 items-center"
-          >
-            <Input
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Type your message..."
-              className="flex-1"
-            />
-            <Button type="submit">
-              <Send className="h-4 w-4" />
+          {/* Checkpoints Selection */}
+          <div className="border-t p-4">
+            <Card className="mb-4">
+              <ScrollArea className="h-[200px] p-4">
+                <div className="space-y-4">
+                  {checkpoints.map((checkpoint) => (
+                    <div key={checkpoint.id} className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={checkpoint.id}
+                          checked={checkpoint.isSelected}
+                          onCheckedChange={() => handleCheckpointToggle(checkpoint.id)}
+                        />
+                        <Label htmlFor={checkpoint.id}>{checkpoint.label}</Label>
+                      </div>
+                      {checkpoint.requiresInput && checkpoint.isSelected && (
+                        <Input
+                          value={checkpoint.value || ""}
+                          onChange={(e) => handleInputChange(checkpoint.id, e.target.value)}
+                          placeholder={checkpoint.inputPlaceholder}
+                          className="ml-6"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </Card>
+            <Button 
+              onClick={handleProcessCheckpoints} 
+              className="w-full"
+              disabled={isProcessing}
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Process Checkpoints
             </Button>
-          </form>
+          </div>
         </main>
       </div>
     </SidebarProvider>
